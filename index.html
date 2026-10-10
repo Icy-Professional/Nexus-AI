@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NexusAI Hub — Persistent Local AI Workspace</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Marked.js for Markdown parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Dexie.js for IndexedDB storage -->
+  <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+  <!-- Highlight.js for code syntax highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f6ff',
+              100: '#e0edff',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              glow: '#38bdf8'
+            },
+            dark: {
+              bg: '#080c14',
+              panel: 'rgba(19, 27, 46, 0.75)',
+              panelBorder: 'rgba(56, 189, 248, 0.15)',
+              input: '#0f172a',
+              card: '#111827'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+    ::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.25); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.45); }
+
+    /* Glassmorphism Classes */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(56, 189, 248, 0.12);
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.5);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .neon-border:focus-within {
+      border-color: rgba(56, 189, 248, 0.6);
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
+    }
+
+    /* Markdown prose styles */
+    .prose-custom p { margin-bottom: 0.75rem; line-height: 1.6; }
+    .prose-custom p:last-child { margin-bottom: 0; }
+    .prose-custom pre { margin: 0.75rem 0; padding: 0; border-radius: 0.5rem; overflow: hidden; background: #0d1117; }
+    .prose-custom code { font-family: ui-monospace, monospace; font-size: 0.875em; padding: 0.15rem 0.35rem; background: rgba(255,255,255,0.1); border-radius: 0.25rem; }
+    .prose-custom pre code { background: transparent; padding: 1rem; display: block; overflow-x: auto; }
+    .prose-custom ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.75rem; }
+    .prose-custom ol { list-style-type: decimal; padding-left: 1.25rem; margin-bottom: 0.75rem; }
+    .prose-custom h1, .prose-custom h2, .prose-custom h3 { font-weight: 700; margin-top: 1rem; margin-bottom: 0.5rem; color: #f8fafc; }
+    .prose-custom blockquote { border-left: 3px solid #38bdf8; padding-left: 0.75rem; color: #94a3b8; font-style: italic; margin: 0.75rem 0; }
+
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.9); }
+    }
+    .animate-pulse-glow { animation: pulseGlow 2s infinite ease-in-out; }
+  </style>
+</head>
+<body class="bg-[#080c14] text-slate-100 font-sans h-screen flex flex-col overflow-hidden antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- Top Navigation Header -->
+  <header class="h-16 border-b border-slate-800/80 glass-panel px-4 flex items-center justify-between z-30 shrink-0">
+    <div class="flex items-center gap-3">
+      <button id="mobileMenuBtn" class="md:hidden p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/60">
+        <i data-lucide="menu" class="w-5 h-5"></i>
+      </button>
+
+      <!-- App Title/Logo -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 via-sky-400 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-sky-500/20">
+          <i data-lucide="database" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-sky-300 bg-clip-text text-transparent">NexusAI Hub</span>
+            <span class="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Dexie IndexedDB Persistent</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Control Options -->
+    <div class="flex items-center gap-2 sm:gap-4">
+      <div class="bg-slate-900/80 p-1 rounded-xl border border-slate-800 flex text-xs font-medium">
+        <button id="modeSingleBtn" onclick="setArenaMode(false)" class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all bg-brand-600 text-white shadow-md">
+          <i data-lucide="message-square" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">Single Chat</span>
+        </button>
+        <button id="modeArenaBtn" onclick="setArenaMode(true)" class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-slate-400 hover:text-white">
+          <i data-lucide="columns" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">Arena Compare</span>
+        </button>
+      </div>
+
+      <button onclick="openKeyGuideModal()" class="p-2 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-xl border border-slate-800 flex items-center gap-2 text-xs font-medium transition-all">
+        <i data-lucide="key-round" class="w-4 h-4 text-amber-400"></i>
+        <span class="hidden sm:inline">API Key Vault</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Application Body -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <div id="mobileBackdrop" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 hidden md:hidden" onclick="toggleMobileSidebar()"></div>
+
+    <!-- Sidebar Chat Sessions & Models -->
+    <aside id="sidebar" class="w-80 border-r border-slate-800/80 glass-panel flex flex-col transition-all duration-300 z-40 fixed md:relative inset-y-0 left-0 -translate-x-full md:translate-x-0 shrink-0">
+      
+      <!-- New Session Action -->
+      <div class="p-3.5 border-b border-slate-800/80 space-y-2">
+        <button onclick="createNewChat()" class="w-full py-2.5 px-4 bg-gradient-to-r from-brand-600 to-sky-600 hover:from-brand-500 hover:to-sky-500 text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-600/20 transition-all active:scale-[0.98]">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          <span>New Session</span>
+        </button>
+
+        <div class="relative">
+          <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 block px-1">Assistant Persona</label>
+          <select id="systemPersonaSelect" onchange="updatePersonaSetting(this.value)" class="w-full bg-slate-900/90 text-slate-200 text-xs rounded-lg px-3 py-2 border border-slate-700/60 focus:outline-none focus:border-sky-500">
+            <option value="helpful">🤖 Helpful General Assistant</option>
+            <option value="coder">💻 Expert Software Architect & Coder</option>
+            <option value="writer">✍️ Creative Storyteller & Copywriter</option>
+            <option value="concise">⚡ Ultra-Concise & Direct Summarizer</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Active Primary Model Dropdown -->
+      <div id="singleModelSelectorBox" class="p-3.5 border-b border-slate-800/80 bg-slate-900/40">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider">AI Model Engine</span>
+          <span id="activeKeyBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono">No Key Required</span>
+        </div>
+        
+        <select id="modelSelector" onchange="handleModelChange()" class="w-full bg-slate-900 text-slate-100 text-xs rounded-xl p-2.5 border border-slate-700/80 focus:outline-none focus:border-sky-500">
+          <optgroup label="⚡ Instant Free (Zero Config)">
+            <option value="pollinations:qwen-coder">Pollinations — Qwen 2.5 Coder 32B</option>
+            <option value="pollinations:llama-3.3-70b">Pollinations — Llama 3.3 70B Turbo</option>
+            <option value="pollinations:mistral-small">Pollinations — Mistral Small 24B</option>
+            <option value="pollinations:deepseek-r1">Pollinations — DeepSeek R1 Hybrid</option>
+          </optgroup>
+          <optgroup label="💎 Google Gemini (Free API Key)">
+            <option value="gemini:gemini-2.5-flash">Google Gemini 2.5 Flash</option>
+            <option value="gemini:gemini-1.5-flash">Google Gemini 1.5 Flash</option>
+            <option value="gemini:gemini-1.5-pro">Google Gemini 1.5 Pro</option>
+          </optgroup>
+          <optgroup label="🚀 Groq Speed Engine (Free API Key)">
+            <option value="groq:llama-3.3-70b-versatile">Groq — Llama 3.3 70B</option>
+            <option value="groq:llama-3.1-8b-instant">Groq — Llama 3.1 8B Instant</option>
+            <option value="groq:mixtral-8x7b-32768">Groq — Mixtral 8x7B MoE</option>
+            <option value="groq:deepseek-r1-distill-llama-70b">Groq — DeepSeek R1 Distill 70B</option>
+          </optgroup>
+          <optgroup label="🌐 OpenRouter Free Router (Free API Key)">
+            <option value="openrouter:deepseek/deepseek-r1:free">OpenRouter — DeepSeek R1 (Free)</option>
+            <option value="openrouter:meta-llama/llama-3.3-70b-instruct:free">OpenRouter — Meta Llama 3.3 70B (Free)</option>
+            <option value="openrouter:qwen/qwen-2.5-72b-instruct:free">OpenRouter — Qwen 2.5 72B (Free)</option>
+          </optgroup>
+          <optgroup label="🤗 Hugging Face API (Free Token)">
+            <option value="huggingface:Qwen/Qwen2.5-Coder-32B-Instruct">HuggingFace — Qwen 2.5 Coder 32B</option>
+            <option value="huggingface:mistralai/Mistral-7B-Instruct-v0.2">HuggingFace — Mistral 7B Instruct</option>
+          </optgroup>
+          <optgroup label="🤖 Cohere Developer Tier (Free API Key)">
+            <option value="cohere:command-r-plus">Cohere — Command R+</option>
+            <option value="cohere:command-r">Cohere — Command R</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <!-- Arena Mode Setup (Hidden by default) -->
+      <div id="arenaModelSelectorBox" class="p-3.5 border-b border-slate-800/80 bg-slate-900/60 hidden space-y-2">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider">Compare 2 Models</span>
+        </div>
+        <div>
+          <label class="text-[10px] text-slate-400 font-mono block mb-0.5">Model Slot A:</label>
+          <select id="arenaModelSelectA" class="w-full bg-slate-900 text-slate-200 text-xs rounded-lg p-2 border border-slate-700">
+            <option value="pollinations:qwen-coder">Pollinations Qwen Coder</option>
+            <option value="groq:llama-3.3-70b-versatile">Groq Llama 3.3 70B</option>
+            <option value="gemini:gemini-2.5-flash">Gemini 2.5 Flash</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[10px] text-slate-400 font-mono block mb-0.5">Model Slot B:</label>
+          <select id="arenaModelSelectB" class="w-full bg-slate-900 text-slate-200 text-xs rounded-lg p-2 border border-slate-700">
+            <option value="pollinations:llama-3.3-70b">Pollinations Llama 3.3 70B</option>
+            <option value="openrouter:deepseek/deepseek-r1:free">OpenRouter DeepSeek R1 Free</option>
+            <option value="gemini:gemini-1.5-pro">Gemini 1.5 Pro</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Persistent History List -->
+      <div class="flex-1 overflow-y-auto p-3 space-y-1">
+        <div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
+          <span>Saved Sessions (IndexedDB)</span>
+          <button onclick="clearAllChats()" class="hover:text-red-400 text-slate-500 text-[10px]">Clear All</button>
+        </div>
+        <div id="chatHistoryList" class="space-y-1">
+          <!-- Populated from IndexedDB -->
+        </div>
+      </div>
+
+      <div class="p-3 border-t border-slate-800/80 bg-slate-900/60">
+        <button onclick="openKeyGuideModal()" class="w-full py-2 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 text-xs flex items-center justify-between border border-slate-700/50 transition-all">
+          <div class="flex items-center gap-2">
+            <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
+            <span>API Vault Status</span>
+          </div>
+          <span id="sidebarKeysBadge" class="px-2 py-0.5 rounded-full bg-slate-900 text-[10px] font-mono text-sky-400">Zero-Config</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Center Chat Panel -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-transparent via-slate-950/40 to-slate-950">
+      
+      <!-- Top Session Status Bar -->
+      <div class="px-4 py-2.5 border-b border-slate-800/60 bg-slate-900/30 flex items-center justify-between text-xs text-slate-400">
+        <div class="flex items-center gap-2 overflow-hidden">
+          <span id="currentChatTitleDisplay" class="font-medium text-slate-200 truncate">Loading Workspace...</span>
+          <button onclick="renameCurrentChat()" class="p-1 hover:text-sky-400 text-slate-500" title="Rename Session">
+            <i data-lucide="edit-3" class="w-3 h-3"></i>
+          </button>
+        </div>
+        
+        <div class="flex items-center gap-2 shrink-0">
+          <button onclick="exportCurrentChatJSON()" class="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-all" title="Export Session JSON">
+            <i data-lucide="file-json" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline text-[11px]">JSON</span>
+          </button>
+          <button onclick="exportCurrentChatMD()" class="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-all" title="Export Markdown">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline text-[11px]">Markdown</span>
+          </button>
+          <button onclick="clearCurrentMessages()" class="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-red-400 transition-all" title="Clear canvas">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages Canvas -->
+      <div id="chatCanvas" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+        <!-- Rendered dynamically from IndexedDB -->
+      </div>
+
+      <!-- User Input Section -->
+      <div class="p-4 border-t border-slate-800/80 glass-panel relative z-20">
+        <div class="max-w-4xl mx-auto space-y-2">
+          <div class="relative bg-slate-900/90 rounded-2xl border border-slate-700/70 neon-border shadow-xl overflow-hidden focus-within:ring-2 focus-within:ring-sky-500/30 transition-all">
+            <textarea id="promptInput" rows="2" placeholder="Ask anything... (e.g. Write a Python web scraper or compare options)" class="w-full bg-transparent px-4 py-3.5 text-slate-100 placeholder-slate-500 text-sm focus:outline-none resize-none max-h-40" onkeydown="handleKeyDown(event)"></textarea>
+
+            <div class="flex items-center justify-between px-3 py-2 bg-slate-950/60 border-t border-slate-800/60">
+              <span class="text-xs text-slate-400 hidden sm:inline">Shift + Enter for new line</span>
+              <button id="sendBtn" onclick="handleSendPrompt()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-sky-500 hover:from-brand-500 hover:to-sky-400 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-brand-500/20 transition-all active:scale-95">
+                <span>Send Prompt</span>
+                <i data-lucide="send" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center text-[11px] text-slate-500 px-1">
+            <span id="activeModelFooterTag">Active Provider: Pollinations (Zero-Config)</span>
+            <span>Local Dexie Database Connected</span>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- API Keys Vault Modal -->
+  <div id="keyGuideModal" class="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 bg-amber-500/10 text-amber-400 rounded-lg">
+            <i data-lucide="key" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-100 text-base">IndexedDB API Key Vault</h3>
+            <p class="text-xs text-slate-400">Keys are saved locally in browser-managed IndexedDB.</p>
+          </div>
+        </div>
+        <button onclick="closeKeyGuideModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
+        
+        <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+          <b>Zero-Config Active:</b> Pollinations AI models require no key. Optional provider keys entered below will unlock direct high-speed limits.
+        </div>
+
+        <div class="space-y-3">
+          <div>
+            <label class="font-semibold text-slate-200 block mb-1">Google Gemini API Key</label>
+            <input type="password" id="key_gemini" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 font-mono">
+          </div>
+
+          <div>
+            <label class="font-semibold text-slate-200 block mb-1">Groq Speed Engine Key</label>
+            <input type="password" id="key_groq" placeholder="gsk_..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 font-mono">
+          </div>
+
+          <div>
+            <label class="font-semibold text-slate-200 block mb-1">OpenRouter API Key</label>
+            <input type="password" id="key_openrouter" placeholder="sk-or-v1-..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 font-mono">
+          </div>
+
+          <div>
+            <label class="font-semibold text-slate-200 block mb-1">Hugging Face Access Token</label>
+            <input type="password" id="key_huggingface" placeholder="hf_..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 font-mono">
+          </div>
+
+          <div>
+            <label class="font-semibold text-slate-200 block mb-1">Cohere Developer Key</label>
+            <input type="password" id="key_cohere" placeholder="Cohere Key..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 font-mono">
+          </div>
+        </div>
+
+      </div>
+
+      <div class="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
+        <button onclick="clearSavedKeys()" class="text-xs text-red-400 hover:underline">Clear Vault Keys</button>
+        <button onclick="saveApiKeysFromModal()" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-xl text-xs shadow-lg">
+          Save to IndexedDB
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    /* =========================================================================
+       1. IndexedDB Initialization with Dexie.js
+       ========================================================================= */
+    const db = new Dexie('OmniAIHubDB');
+
+    db.version(1).stores({
+      chats: 'id, title, createdAt, updatedAt',
+      messages: '++id, chatId, role, text, isArena, responses, modelTag, timestamp',
+      settings: 'key, value'
+    });
+
+    // Default System Personas
+    const PERSONAS = {
+      helpful: "You are OmniAI, an intelligent, concise, and helpful AI assistant.",
+      coder: "You are an expert Senior Software Engineer and Architect. Provide clean, efficient, bug-free code snippets with concise explanations.",
+      writer: "You are a creative storyteller and skilled copywriter. Craft engaging, elegant, and expressive responses.",
+      concise: "You are a direct, zero-fluff summarizer. Give high-impact bullet points and short direct answers."
+    };
+
+    let currentChatId = null;
+    let isArenaMode = false;
+    let cachedKeys = {};
+
+    /* =========================================================================
+       2. Application Setup on Load
+       ========================================================================= */
+    window.addEventListener('DOMContentLoaded', async () => {
+      lucide.createIcons();
+      await loadSettings();
+      await loadStoredKeys();
+      await ensureActiveChat();
+      await renderHistoryList();
+      await renderChatCanvas();
+      handleModelChange();
+    });
+
+    /* =========================================================================
+       3. Settings & Key Vault Management in Dexie
+       ========================================================================= */
+    async function getSetting(key, defaultValue = null) {
+      const record = await db.settings.get(key);
+      return record ? record.value : defaultValue;
+    }
+
+    async function setSetting(key, value) {
+      await db.settings.put({ key, value });
+    }
+
+    async function loadSettings() {
+      const persona = await getSetting('systemPersona', 'helpful');
+      document.getElementById('systemPersonaSelect').value = persona;
+    }
+
+    async function updatePersonaSetting(val) {
+      await setSetting('systemPersona', val);
+    }
+
+    async function loadStoredKeys() {
+      const providers = ['gemini', 'groq', 'openrouter', 'huggingface', 'cohere'];
+      cachedKeys = {};
+
+      for (const p of providers) {
+        const keyVal = await getSetting(`key_${p}`, '');
+        cachedKeys[p] = keyVal;
+        const input = document.getElementById(`key_${p}`);
+        if (input) input.value = keyVal;
+      }
+      updateSidebarKeysStatus();
+    }
+
+    async function saveApiKeysFromModal() {
+      const providers = ['gemini', 'groq', 'openrouter', 'huggingface', 'cohere'];
+      for (const p of providers) {
+        const input = document.getElementById(`key_${p}`);
+        if (input) {
+          const val = input.value.trim();
+          await setSetting(`key_${p}`, val);
+          cachedKeys[p] = val;
+        }
+      }
+      updateSidebarKeysStatus();
+      closeKeyGuideModal();
+      handleModelChange();
+    }
+
+    async function clearSavedKeys() {
+      const providers = ['gemini', 'groq', 'openrouter', 'huggingface', 'cohere'];
+      for (const p of providers) {
+        await db.settings.delete(`key_${p}`);
+        cachedKeys[p] = '';
+        const input = document.getElementById(`key_${p}`);
+        if (input) input.value = '';
+      }
+      updateSidebarKeysStatus();
+      handleModelChange();
+    }
+
+    function updateSidebarKeysStatus() {
+      const activeCount = Object.values(cachedKeys).filter(k => !!k).length;
+      const badge = document.getElementById('sidebarKeysBadge');
+      if (badge) {
+        badge.innerText = activeCount > 0 ? `${activeCount} Vault Keys` : 'Zero-Config';
+        badge.className = activeCount > 0 
+          ? "px-2 py-0.5 rounded-full bg-emerald-500/20 text-[10px] font-mono text-emerald-400"
+          : "px-2 py-0.5 rounded-full bg-slate-900 text-[10px] font-mono text-sky-400";
+      }
+    }
+
+    /* =========================================================================
+       4. Persistent Chat Session Management (IndexedDB)
+       ========================================================================= */
+    async function ensureActiveChat() {
+      currentChatId = await getSetting('activeChatId', null);
+      if (currentChatId) {
+        const existing = await db.chats.get(currentChatId);
+        if (!existing) currentChatId = null;
+      }
+
+      if (!currentChatId) {
+        await createNewChat();
+      }
+    }
+
+    async function createNewChat() {
+      const id = 'chat_' + Date.now();
+      const newChat = {
+        id: id,
+        title: 'Session ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      await db.chats.add(newChat);
+      currentChatId = id;
+      await setSetting('activeChatId', id);
+
+      await renderHistoryList();
+      await renderChatCanvas();
+    }
+
+    async function switchChat(id) {
+      currentChatId = id;
+      await setSetting('activeChatId', id);
+      await renderHistoryList();
+      await renderChatCanvas();
+    }
+
+    async function deleteChat(id) {
+      await db.chats.delete(id);
+      await db.messages.where('chatId').equals(id).delete();
+
+      if (currentChatId === id) {
+        const remaining = await db.chats.orderBy('updatedAt').reverse().toArray();
+        if (remaining.length > 0) {
+          currentChatId = remaining[0].id;
+          await setSetting('activeChatId', currentChatId);
+        } else {
+          await createNewChat();
+          return;
+        }
+      }
+
+      await renderHistoryList();
+      await renderChatCanvas();
+    }
+
+    async function clearAllChats() {
+      if (confirm('Clear all chat sessions permanently from IndexedDB?')) {
+        await db.chats.clear();
+        await db.messages.clear();
+        await createNewChat();
+      }
+    }
+
+    async function clearCurrentMessages() {
+      if (!currentChatId) return;
+      await db.messages.where('chatId').equals(currentChatId).delete();
+      await renderChatCanvas();
+    }
+
+    async function renameCurrentChat() {
+      if (!currentChatId) return;
+      const chat = await db.chats.get(currentChatId);
+      if (!chat) return;
+
+      const newTitle = prompt('Enter new session title:', chat.title);
+      if (newTitle && newTitle.trim()) {
+        await db.chats.update(currentChatId, { title: newTitle.trim(), updatedAt: Date.now() });
+        await renderHistoryList();
+        document.getElementById('currentChatTitleDisplay').innerText = newTitle.trim();
+      }
+    }
+
+    /* =========================================================================
+       5. UI History Sidebar & Canvas Rendering
+       ========================================================================= */
+    async function renderHistoryList() {
+      const container = document.getElementById('chatHistoryList');
+      container.innerHTML = '';
+
+      const allChats = await db.chats.orderBy('updatedAt').reverse().toArray();
+
+      allChats.forEach(item => {
+        const isActive = item.id === currentChatId;
+        const div = document.createElement('div');
+        div.className = `group flex items-center justify-between px-3 py-2 rounded-xl text-xs cursor-pointer transition-all ${
+          isActive 
+            ? 'bg-brand-600/20 text-sky-300 border border-brand-500/30 font-medium' 
+            : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+        }`;
+        
+        div.onclick = () => switchChat(item.id);
+
+        div.innerHTML = `
+          <div class="flex items-center gap-2 truncate">
+            <i data-lucide="message-square" class="w-3.5 h-3.5 shrink-0 ${isActive ? 'text-sky-400' : 'text-slate-500'}"></i>
+            <span class="truncate">${escapeHtml(item.title)}</span>
+          </div>
+          <button onclick="event.stopPropagation(); deleteChat('${item.id}')" class="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 transition-all">
+            <i data-lucide="x" class="w-3 h-3"></i>
+          </button>
+        `;
+        container.appendChild(div);
+      });
+
+      lucide.createIcons();
+    }
+
+    async function renderChatCanvas() {
+      const canvas = document.getElementById('chatCanvas');
+      canvas.innerHTML = '';
+
+      if (!currentChatId) return;
+
+      const chat = await db.chats.get(currentChatId);
+      if (!chat) return;
+
+      document.getElementById('currentChatTitleDisplay').innerText = chat.title;
+
+      const messages = await db.messages.where('chatId').equals(currentChatId).sortBy('timestamp');
+
+      if (messages.length === 0) {
+        canvas.innerHTML = `
+          <div class="h-full flex flex-col items-center justify-center text-center p-6 space-y-4 max-w-lg mx-auto my-auto">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-600 to-sky-400 flex items-center justify-center text-white shadow-xl">
+              <i data-lucide="database" class="w-8 h-8"></i>
+            </div>
+            <div>
+              <h2 class="text-xl font-bold text-slate-100">IndexedDB Persistent Workspace</h2>
+              <p class="text-xs text-slate-400 mt-1">All chats and API tokens are auto-saved locally in IndexedDB.</p>
+            </div>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      messages.forEach(msg => {
+        if (msg.role === 'user') {
+          appendUserMessageDOM(msg.text);
+        } else if (msg.role === 'assistant') {
+          if (msg.isArena) {
+            appendArenaResponseDOM(msg.responses);
+          } else {
+            appendBotMessageDOM(msg.modelTag, msg.text);
+          }
+        }
+      });
+
+      canvas.scrollTop = canvas.scrollHeight;
+      lucide.createIcons();
+      highlightCodeBlocks();
+    }
+
+    function appendUserMessageDOM(text) {
+      const canvas = document.getElementById('chatCanvas');
+      const div = document.createElement('div');
+      div.className = "flex justify-end mb-4";
+      div.innerHTML = `
+        <div class="max-w-[85%] sm:max-w-[70%] bg-brand-600 text-white rounded-2xl rounded-tr-none px-4 py-3 shadow-lg text-xs sm:text-sm whitespace-pre-wrap">
+          ${escapeHtml(text)}
+        </div>
+      `;
+      canvas.appendChild(div);
+      canvas.scrollTop = canvas.scrollHeight;
+    }
+
+    function appendBotMessageDOM(modelTag, text, isThinking = false) {
+      const canvas = document.getElementById('chatCanvas');
+      const div = document.createElement('div');
+      div.className = "flex justify-start mb-4";
+
+      const parsedContent = marked.parse(text || '');
+
+      div.innerHTML = `
+        <div class="max-w-[90%] sm:max-w-[80%] glass-panel rounded-2xl rounded-tl-none p-4 text-xs sm:text-sm border border-slate-700/80">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3 text-[11px]">
+            <span class="font-bold text-sky-400 flex items-center gap-1.5">
+              <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
+              ${escapeHtml(modelTag)}
+            </span>
+            <button onclick="copyToClipboard(this)" data-text="${escapeAttribute(text)}" class="text-slate-400 hover:text-white p-1 rounded">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <div class="prose-custom text-slate-200">
+            ${isThinking ? '<span class="text-slate-400 animate-pulse flex items-center gap-2"><i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Processing and saving to IndexedDB...</span>' : parsedContent}
+          </div>
+        </div>
+      `;
+      canvas.appendChild(div);
+      canvas.scrollTop = canvas.scrollHeight;
+      lucide.createIcons();
+      return div;
+    }
+
+    function appendArenaResponseDOM(responses) {
+      const canvas = document.getElementById('chatCanvas');
+      const div = document.createElement('div');
+      div.className = "mb-4 w-full";
+
+      let gridCols = responses.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 lg:grid-cols-3';
+
+      let cardsHTML = responses.map(res => {
+        const parsed = marked.parse(res.text || '');
+        return `
+          <div class="glass-panel rounded-xl p-4 border border-slate-700 flex flex-col h-full">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3 text-[11px]">
+              <span class="font-bold text-amber-400 truncate">${escapeHtml(res.modelTag)}</span>
+              <button onclick="copyToClipboard(this)" data-text="${escapeAttribute(res.text)}" class="text-slate-400 hover:text-white">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+            <div class="prose-custom text-xs text-slate-200 flex-1">
+              ${res.isLoading ? '<span class="text-slate-400 animate-pulse flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Querying...</span>' : parsed}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      div.innerHTML = `<div class="grid ${gridCols} gap-3">${cardsHTML}</div>`;
+      canvas.appendChild(div);
+      canvas.scrollTop = canvas.scrollHeight;
+      lucide.createIcons();
+      return div;
+    }
+
+    /* =========================================================================
+       6. Prompt Handlers & Provider API Logic
+       ========================================================================= */
+    function handleKeyDown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendPrompt();
+      }
+    }
+
+    async function handleSendPrompt() {
+      const input = document.getElementById('promptInput');
+      const promptText = input.value.trim();
+      if (!promptText || !currentChatId) return;
+
+      input.value = '';
+
+      const personaKey = document.getElementById('systemPersonaSelect').value;
+      const systemPrompt = PERSONAS[personaKey] || PERSONAS.helpful;
+
+      // 1. Save user prompt to Dexie IndexedDB
+      await db.messages.add({
+        chatId: currentChatId,
+        role: 'user',
+        text: promptText,
+        timestamp: Date.now()
+      });
+
+      await db.chats.update(currentChatId, { updatedAt: Date.now() });
+
+      // Update session title if first message
+      const count = await db.messages.where('chatId').equals(currentChatId).count();
+      if (count <= 1) {
+        const autoTitle = promptText.substring(0, 26) + (promptText.length > 26 ? '...' : '');
+        await db.chats.update(currentChatId, { title: autoTitle });
+        await renderHistoryList();
+      }
+
+      appendUserMessageDOM(promptText);
+
+      if (isArenaMode) {
+        const modelA = document.getElementById('arenaModelSelectA').value;
+        const modelB = document.getElementById('arenaModelSelectB').value;
+
+        const arenaResponses = [
+          { modelTag: modelA, text: '', isLoading: true },
+          { modelTag: modelB, text: '', isLoading: true }
+        ];
+
+        appendArenaResponseDOM(arenaResponses);
+
+        const p1 = queryAIProvider(modelA, promptText, systemPrompt);
+        const p2 = queryAIProvider(modelB, promptText, systemPrompt);
+
+        const results = await Promise.allSettled([p1, p2]);
+
+        arenaResponses[0].text = results[0].status === 'fulfilled' ? results[0].value : `Error: ${results[0].reason?.message || 'Failed'}`;
+        arenaResponses[0].isLoading = false;
+
+        arenaResponses[1].text = results[1].status === 'fulfilled' ? results[1].value : `Error: ${results[1].reason?.message || 'Failed'}`;
+        arenaResponses[1].isLoading = false;
+
+        // Save assistant Arena response to Dexie
+        await db.messages.add({
+          chatId: currentChatId,
+          role: 'assistant',
+          isArena: true,
+          responses: arenaResponses,
+          timestamp: Date.now()
+        });
+
+        await renderChatCanvas();
+
+      } else {
+        const selectedModel = document.getElementById('modelSelector').value;
+        appendBotMessageDOM(selectedModel, '', true);
+
+        try {
+          const responseText = await queryAIProvider(selectedModel, promptText, systemPrompt);
+
+          // Save assistant response to Dexie
+          await db.messages.add({
+            chatId: currentChatId,
+            role: 'assistant',
+            isArena: false,
+            modelTag: selectedModel,
+            text: responseText,
+            timestamp: Date.now()
+          });
+
+          await renderChatCanvas();
+
+        } catch (err) {
+          await db.messages.add({
+            chatId: currentChatId,
+            role: 'assistant',
+            isArena: false,
+            modelTag: selectedModel,
+            text: `⚠️ **Error querying provider**: ${err.message}`,
+            timestamp: Date.now()
+          });
+          await renderChatCanvas();
+        }
+      }
+    }
+
+    /* Multi-Provider Unified Router */
+    async function queryAIProvider(modelConfig, prompt, systemPrompt) {
+      const [provider, modelName] = modelConfig.split(':');
+      const apiKey = cachedKeys[provider] || '';
+
+      if (provider === 'pollinations') {
+        const url = `https://text.pollinations.ai/`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: prompt }
+            ],
+            model: modelName || "qwen-coder"
+          })
+        });
+        if (!res.ok) throw new Error(`Pollinations API status ${res.status}`);
+        return await res.text();
+      }
+
+      if (!apiKey) {
+        throw new Error(`Missing API Key for ${provider.toUpperCase()} in local IndexedDB Vault.`);
+      }
+
+      if (provider === 'gemini') {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${prompt}` }] }]
+          })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error.message || 'Gemini Error');
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || "No response.";
+      }
+
+      if (provider === 'groq' || provider === 'openrouter') {
+        const url = provider === 'groq' 
+          ? 'https://api.groq.com/openai/v1/chat/completions' 
+          : 'https://openrouter.ai/api/v1/chat/completions';
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: modelName,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: prompt }
+            ]
+          })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error.message || 'API Error');
+        return data.choices?.[0]?.message?.content || "No response.";
+      }
+
+      if (provider === 'huggingface') {
+        const url = `https://api-inference.huggingface.co/models/${modelName}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ inputs: `${systemPrompt}\n\nUser: ${prompt}` })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error || 'HuggingFace Error');
+        return Array.isArray(data) ? data[0]?.generated_text : (data.generated_text || JSON.stringify(data));
+      }
+
+      if (provider === 'cohere') {
+        const url = 'https://api.cohere.ai/v1/chat';
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ model: modelName, message: prompt, preamble: systemPrompt })
+        });
+        const data = await res.json();
+        if (data.message && !data.text) throw new Error(data.message);
+        return data.text || "No response.";
+      }
+
+      throw new Error(`Unknown provider: ${provider}`);
+    }
+
+    /* =========================================================================
+       7. UI Utility & Export Functions
+       ========================================================================= */
+    function setArenaMode(enable) {
+      isArenaMode = enable;
+      document.getElementById('modeSingleBtn').className = isArenaMode 
+        ? "px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-slate-400 hover:text-white"
+        : "px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all bg-brand-600 text-white shadow-md font-semibold";
+
+      document.getElementById('modeArenaBtn').className = isArenaMode 
+        ? "px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all bg-amber-600 text-white shadow-md font-semibold"
+        : "px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-slate-400 hover:text-white";
+
+      document.getElementById('singleModelSelectorBox').classList.toggle('hidden', isArenaMode);
+      document.getElementById('arenaModelSelectorBox').classList.toggle('hidden', !isArenaMode);
+    }
+
+    function handleModelChange() {
+      const selected = document.getElementById('modelSelector').value;
+      const [provider, modelName] = selected.split(':');
+      const badge = document.getElementById('activeKeyBadge');
+      const footer = document.getElementById('activeModelFooterTag');
+
+      if (provider === 'pollinations') {
+        badge.innerText = "Instant Free";
+        badge.className = "text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono";
+        footer.innerText = `Active Model: Pollinations (${modelName}) — Zero Config`;
+      } else {
+        const hasKey = !!cachedKeys[provider];
+        badge.innerText = hasKey ? "Vault Key Active" : "Key Needed";
+        badge.className = hasKey 
+          ? "text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono"
+          : "text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-mono";
+        footer.innerText = `Active Model: ${provider.toUpperCase()} (${modelName})`;
+      }
+    }
+
+    function highlightCodeBlocks() {
+      document.querySelectorAll('pre code').forEach((block) => {
+        hljs.highlightElement(block);
+      });
+    }
+
+    function copyToClipboard(btn) {
+      const text = btn.getAttribute('data-text');
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i>`;
+        lucide.createIcons();
+        setTimeout(() => {
+          btn.innerHTML = `<i data-lucide="copy" class="w-3.5 h-3.5"></i>`;
+          lucide.createIcons();
+        }, 1500);
+      });
+    }
+
+    async function exportCurrentChatMD() {
+      if (!currentChatId) return;
+      const chat = await db.chats.get(currentChatId);
+      const messages = await db.messages.where('chatId').equals(currentChatId).sortBy('timestamp');
+
+      let markdown = `# ${chat.title}\n*Exported from OmniAI Hub IndexedDB*\n\n`;
+      messages.forEach(m => {
+        if (m.role === 'user') {
+          markdown += `### User:\n${m.text}\n\n`;
+        } else {
+          markdown += `### Assistant (${m.modelTag || 'Arena'}):\n${m.text || ''}\n\n`;
+        }
+      });
+
+      downloadFile(markdown, `${chat.title.toLowerCase().replace(/[^a-z0-9]/g, '_')}.md`, 'text/markdown');
+    }
+
+    async function exportCurrentChatJSON() {
+      if (!currentChatId) return;
+      const chat = await db.chats.get(currentChatId);
+      const messages = await db.messages.where('chatId').equals(currentChatId).sortBy('timestamp');
+
+      const data = { session: chat, history: messages };
+      downloadFile(JSON.stringify(data, null, 2), `${chat.title.toLowerCase().replace(/[^a-z0-9]/g, '_')}.json`, 'application/json');
+    }
+
+    function downloadFile(content, fileName, contentType) {
+      const a = document.createElement('a');
+      const file = new Blob([content], { type: contentType });
+      a.href = URL.createObjectURL(file);
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function openKeyGuideModal() { document.getElementById('keyGuideModal').classList.remove('hidden'); }
+    function closeKeyGuideModal() { document.getElementById('keyGuideModal').classList.add('hidden'); }
+    function toggleMobileSidebar() {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full');
+      document.getElementById('mobileBackdrop').classList.toggle('hidden');
+    }
+  </script>
+</body>
+</html>
